@@ -175,13 +175,13 @@ import {
 
           <!-- Request body tab -->
           <div class="etl-detail-body" *ngIf="detailTab === 'request' && selectedEvent.type === 'http'">
-            <pre class="etl-json" *ngIf="asHttp(selectedEvent).requestBody">{{ asHttp(selectedEvent).requestBody | json }}</pre>
+            <pre class="etl-json" *ngIf="asHttp(selectedEvent).requestBody">{{ prettifyJson(asHttp(selectedEvent).requestBody) }}</pre>
             <div class="etl-empty" *ngIf="!asHttp(selectedEvent).requestBody">No request body</div>
           </div>
 
           <!-- Response body tab -->
           <div class="etl-detail-body" *ngIf="detailTab === 'response' && selectedEvent.type === 'http'">
-            <pre class="etl-json" *ngIf="asHttp(selectedEvent).responseBody">{{ asHttp(selectedEvent).responseBody | json }}</pre>
+            <pre class="etl-json" *ngIf="asHttp(selectedEvent).responseBody">{{ prettifyJson(asHttp(selectedEvent).responseBody) }}</pre>
             <div class="etl-empty" *ngIf="!asHttp(selectedEvent).responseBody">No response body</div>
             <div class="etl-truncated" *ngIf="asHttp(selectedEvent).truncated">Body was truncated at capture time</div>
           </div>
@@ -566,6 +566,16 @@ export class ReplayPanelComponent implements OnInit, OnDestroy {
       error: res.error,
       truncated: res.truncated,
     };
+  }
+
+  prettifyJson(body: unknown): string {
+    if (body == null) return '';
+    try {
+      const parsed = typeof body === 'string' ? JSON.parse(body) : body;
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return String(body);
+    }
   }
 
   asClick(event: TimelineEvent): ClickEvent {
