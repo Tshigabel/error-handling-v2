@@ -7,20 +7,21 @@ import { AppComponent } from './app.component';
 import { HomeComponent } from './pages/home/home.component';
 import { AboutComponent } from './pages/about/about.component';
 import { ErrorTimelineModule } from './error-timeline/error-timeline.module';
+import { environment } from '../environments/environment';
 
 const errorTimelineConfig = {
-  reportEndpoint: '/api/error-reports',
+  reportEndpoint: environment.apiBaseUrl + '/api/error-reports',
   app: {
     name: 'error-timeline-demo',
     version: '0.0.1',
-    environment: 'development',
+    environment: environment.production ? 'production' : 'development',
   },
   retention: { maxAgeMs: 120000, minEvents: 10 },
-  ignoreUrls: [],
+  ignoreUrls: [/\/health$/, /\/actuator/] as RegExp[],
   redactHeaders: ['authorization', 'cookie', 'set-cookie'],
   redactBodyKeys: ['password', 'token', 'secret'],
   maxBodyBytes: 65536,
-  replay: { enabled: true },
+  replay: { enabled: !environment.production },
 };
 
 @NgModule({
