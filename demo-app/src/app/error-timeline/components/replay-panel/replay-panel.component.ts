@@ -537,7 +537,35 @@ export class ReplayPanelComponent implements OnInit, OnDestroy {
   }
 
   asHttp(event: TimelineEvent): HttpEvent {
-    return event.payload as HttpEvent;
+    if (event.type !== 'http') return event.payload as HttpEvent;
+
+    const clicked = event.payload as HttpEvent;
+    const correlationId = clicked.correlationId;
+
+    const pair = this.timeline
+      .filter((e) => e.type === 'http' && e !== event)
+      .map((e) => e.payload as HttpEvent)
+      .find((p) => p.correlationId === correlationId);
+
+    if (!pair) return clicked;
+
+    const req = clicked.phase === 'request' ? clicked : pair;
+    const res = clicked.phase === 'response' ? clicked : pair;
+
+    return {
+      correlationId,
+      phase: clicked.phase,
+      method: req.method || res.method,
+      url: req.url || res.url,
+      requestHeaders: req.requestHeaders,
+      requestBody: req.requestBody,
+      status: res.status,
+      responseHeaders: res.responseHeaders,
+      responseBody: res.responseBody,
+      durationMs: res.durationMs,
+      error: res.error,
+      truncated: res.truncated,
+    };
   }
 
   asClick(event: TimelineEvent): ClickEvent {
