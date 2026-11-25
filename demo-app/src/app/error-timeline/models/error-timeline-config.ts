@@ -1,8 +1,6 @@
 import { InjectionToken } from '@angular/core';
 
 export interface RecordingRules {
-  startRoutes: string[];
-  ignoreRoutes: string[];
   fileUploadEndpoints: RegExp[];
   maxReportBytes: number;
   trimThresholdBytes: number;
@@ -41,8 +39,6 @@ export const DEFAULT_CONFIG: ErrorTimelineConfig = {
   app: { name: '', version: '', environment: '' },
   replay: { enabled: false },
   recording: {
-    startRoutes: ['/landing-page', '/queue'],
-    ignoreRoutes: ['/login'],
     fileUploadEndpoints: [],
     maxReportBytes: 2_000_000,
     trimThresholdBytes: 1_500_000,

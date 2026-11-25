@@ -39,6 +39,15 @@ export class ReplayDriverService {
       return;
     }
 
+    if (this.index === 0) {
+      const report = this.replayState.getReport();
+      if (report && report.initialRoute) {
+        this.ngZone.run(() => {
+          this.router.navigateByUrl(report.initialRoute);
+        });
+      }
+    }
+
     this.status$.next('playing');
     this.processNext();
   }

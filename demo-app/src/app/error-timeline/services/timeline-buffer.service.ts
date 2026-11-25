@@ -12,7 +12,7 @@ import {
 export class TimelineBufferService {
   private buffer: TimelineEvent[] = [];
   private seq = 0;
-  private _recording = false;
+  private _recording = true;
 
   get recording(): boolean {
     return this._recording;
