@@ -162,29 +162,105 @@ export class TimelineHttpInterceptor implements HttpInterceptor {
 
     if (body instanceof FormData) {
       const files: Record<string, unknown>[] = [];
+      const formFields: Record<string, string> = {};
       body.forEach((value, key) => {
         if (value instanceof File) {
+          files.push(this.extractFileInfo(value, key));
+        } else if (value instanceof Blob) {
           files.push({
             fieldName: key,
-            fileName: value.name,
-            fileSize: value.size,
-            fileType: value.type || 'unknown',
-            lastModified: new Date(value.lastModified).toISOString(),
+            fileName: `blob_${key}`,
+            fileExtension: this.mimeToExtension(value.type),
+            fileSizeBytes: value.size,
+            fileSizeReadable: this.formatBytes(value.size),
+            fileType: value.type || 'application/octet-stream',
           });
         } else {
-          if (!metadata['formFields']) {
-            metadata['formFields'] = {} as Record<string, string>;
-          }
-          (metadata['formFields'] as Record<string, string>)[key] = String(value);
+          formFields[key] = String(value);
         }
       });
       metadata['files'] = files;
+      if (Object.keys(formFields).length > 0) {
+        metadata['formFields'] = formFields;
+      }
+    } else if (body instanceof Blob) {
+      metadata['files'] = [{
+        fileName: body instanceof File ? body.name : 'blob',
+        fileSizeBytes: body.size,
+        fileSizeReadable: this.formatBytes(body.size),
+        fileType: body.type || 'application/octet-stream',
+      }];
+    } else if (body instanceof ArrayBuffer) {
+      metadata['files'] = [{
+        fileName: 'arraybuffer',
+        fileSizeBytes: body.byteLength,
+        fileSizeReadable: this.formatBytes(body.byteLength),
+        fileType: 'application/octet-stream',
+      }];
     } else {
+      const json = JSON.stringify(body);
       metadata['bodyType'] = typeof body;
-      metadata['bodySize'] = JSON.stringify(body).length;
+      metadata['bodySizeBytes'] = json ? json.length : 0;
+      metadata['bodySizeReadable'] = this.formatBytes(json ? json.length : 0);
     }
 
     return metadata;
+  }
+
+  private extractFileInfo(file: File, fieldName: string): Record<string, unknown> {
+    const nameParts = file.name.split('.');
+    const extension = nameParts.length > 1 ? nameParts.pop() : '';
+
+    return {
+      fieldName,
+      fileName: file.name,
+      fileExtension: extension,
+      fileSizeBytes: file.size,
+      fileSizeReadable: this.formatBytes(file.size),
+      fileType: file.type || this.guessTypeFromExtension(extension || ''),
+      lastModified: new Date(file.lastModified).toISOString(),
+    };
+  }
+
+  private formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    const size = bytes / Math.pow(1024, i);
+    return `${size.toFixed(i === 0 ? 0 : 2)} ${units[i]}`;
+  }
+
+  private mimeToExtension(mime: string): string {
+    const map: Record<string, string> = {
+      'application/pdf': 'pdf',
+      'image/png': 'png',
+      'image/jpeg': 'jpg',
+      'text/csv': 'csv',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+      'application/vnd.ms-excel': 'xls',
+      'application/json': 'json',
+      'text/plain': 'txt',
+      'application/xml': 'xml',
+      'application/zip': 'zip',
+    };
+    return map[mime] || '';
+  }
+
+  private guessTypeFromExtension(ext: string): string {
+    const map: Record<string, string> = {
+      pdf: 'application/pdf',
+      png: 'image/png',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      csv: 'text/csv',
+      xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      xls: 'application/vnd.ms-excel',
+      json: 'application/json',
+      txt: 'text/plain',
+      xml: 'application/xml',
+      zip: 'application/zip',
+    };
+    return map[ext.toLowerCase()] || 'application/octet-stream';
   }
 
   private headersToRecord(headers: HttpHeaders): Record<string, string> {
