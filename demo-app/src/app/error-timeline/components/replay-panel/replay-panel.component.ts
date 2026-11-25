@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { ReplayStateService } from '../../services/replay-state.service';
 import {
@@ -75,7 +75,7 @@ import {
         </div>
 
         <!-- Event list -->
-        <div class="etl-event-list">
+        <div class="etl-event-list" #eventList>
           <div
             *ngFor="let event of filteredTimeline; let i = index"
             class="etl-event-row"
@@ -304,7 +304,8 @@ import {
       }
       .etl-event-row:hover { background: #2d3748; }
       .etl-event-row-active { background: #2a4365 !important; }
-      .etl-event-row-current { border-left: 3px solid #3182ce; }
+      .etl-event-row-current { border-left: 3px solid #3182ce; background: #2c5282 !important; animation: etl-pulse 0.6s ease-out; }
+      @keyframes etl-pulse { 0% { background: #3182ce; } 100% { background: #2c5282; } }
       .etl-event-row-error { border-left: 3px solid #e53e3e; }
       .etl-col-seq { color: #718096; width: 36px; flex-shrink: 0; }
       .etl-col-type {
@@ -397,6 +398,8 @@ import {
   ],
 })
 export class ReplayPanelComponent implements OnInit, OnDestroy {
+  @ViewChild('eventList', { static: false }) eventListRef: ElementRef;
+
   active = false;
   loaded = false;
   report: ErrorReport | null = null;
@@ -428,9 +431,10 @@ export class ReplayPanelComponent implements OnInit, OnDestroy {
 
     this.subs.push(
       this.driver.status$.subscribe((s) => (this.status = s)),
-      this.replayState.currentEventIndex$.subscribe(
-        (i) => (this.currentIndex = i)
-      ),
+      this.replayState.currentEventIndex$.subscribe((i) => {
+        this.currentIndex = i;
+        this.scrollToCurrentEvent(i);
+      }),
       this.driver.log$.subscribe((msg) => {
         this.logs.push(msg);
         if (this.logs.length > 200) this.logs.shift();
@@ -473,6 +477,22 @@ export class ReplayPanelComponent implements OnInit, OnDestroy {
   selectEvent(event: TimelineEvent): void {
     this.selectedEvent = event;
     this.detailTab = 'overview';
+  }
+
+  private scrollToCurrentEvent(index: number): void {
+    if (index < 0 || !this.eventListRef) return;
+    const event = this.timeline[index];
+    if (event) {
+      this.selectedEvent = event;
+      this.detailTab = 'overview';
+    }
+    setTimeout(() => {
+      const container = this.eventListRef.nativeElement as HTMLElement;
+      const row = container.querySelector('.etl-event-row-current') as HTMLElement;
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
   }
 
   getOriginalIndex(event: TimelineEvent): number {
