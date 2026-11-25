@@ -43,8 +43,12 @@ export class ReplayDriverService {
       const report = this.replayState.getReport();
       if (report && report.initialRoute) {
         this.ngZone.run(() => {
-          this.router.navigateByUrl(report.initialRoute);
+          return this.router.navigateByUrl(report.initialRoute);
+        }).then(() => {
+          this.status$.next('playing');
+          this.processNext();
         });
+        return;
       }
     }
 
@@ -98,8 +102,11 @@ export class ReplayDriverService {
 
     switch (event.type) {
       case 'navigation':
-        this.handleNavigation(event.payload as NavigationEvent);
-        break;
+        this.handleNavigation(event.payload as NavigationEvent).then(() => {
+          this.index++;
+          this.scheduleNext(event);
+        });
+        return;
       case 'click':
         this.handleClick(event.payload as ClickEvent);
         break;
@@ -117,9 +124,9 @@ export class ReplayDriverService {
     this.scheduleNext(event);
   }
 
-  private handleNavigation(nav: NavigationEvent): void {
-    this.ngZone.run(() => {
-      this.router.navigateByUrl(nav.to);
+  private handleNavigation(nav: NavigationEvent): Promise<boolean> {
+    return this.ngZone.run(() => {
+      return this.router.navigateByUrl(nav.to);
     });
   }
 
