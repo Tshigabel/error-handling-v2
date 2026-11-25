@@ -98,32 +98,81 @@ export class TimelineBufferService {
     const currentSize = this.estimateBufferSize();
     if (currentSize <= threshold) return;
 
-    const journeyRoutes = this.config.recording.startRoutes;
-    let trimIndex = -1;
+    const prefix = this.config.recording.journeySegmentPrefix;
+    const minHttp = this.config.recording.minProtectedHttpEvents;
 
-    for (let i = 1; i < this.buffer.length; i++) {
-      const event = this.buffer[i];
-      if (event.type === 'navigation') {
-        const nav = event.payload as NavigationEvent;
-        if (this.isJourneyRoute(nav.to, journeyRoutes)) {
-          trimIndex = i;
-        }
+    const valueChanges = this.findValueChangeNavigations(prefix);
+
+    if (valueChanges.length >= 2) {
+      const secondToLast = valueChanges[valueChanges.length - 2];
+      const trimIndex = secondToLast.index;
+
+      if (this.canTrimTo(trimIndex, minHttp)) {
+        this.buffer = this.buffer.slice(trimIndex);
+        return;
       }
     }
 
-    if (trimIndex > 0) {
-      this.buffer = this.buffer.slice(trimIndex);
-      return;
-    }
-
-    while (this.buffer.length > 1 && this.estimateBufferSize() > threshold) {
+    const safeCutoff = this.getSafeCutoff(minHttp);
+    while (this.buffer.length > safeCutoff && this.estimateBufferSize() > threshold) {
       this.buffer.shift();
     }
   }
 
-  private isJourneyRoute(url: string, routes: string[]): boolean {
+  private findValueChangeNavigations(prefix: string): { index: number; value: string }[] {
+    const changes: { index: number; value: string }[] = [];
+    let lastValue: string | null = null;
+
+    for (let i = 0; i < this.buffer.length; i++) {
+      const event = this.buffer[i];
+      if (event.type !== 'navigation') continue;
+
+      const nav = event.payload as NavigationEvent;
+      const value = this.extractJourneyValue(nav.to, prefix);
+      if (value === null) continue;
+
+      if (value !== lastValue) {
+        changes.push({ index: i, value });
+        lastValue = value;
+      }
+    }
+
+    return changes;
+  }
+
+  private extractJourneyValue(url: string, prefix: string): string | null {
     const path = url.split('?')[0];
-    return routes.some((route) => path.endsWith(route));
+    const segments = path.split('/').filter((s) => s.length > 0);
+
+    for (let i = 0; i < segments.length - 1; i++) {
+      if (segments[i].startsWith(prefix)) {
+        return segments[i + 1];
+      }
+    }
+
+    return null;
+  }
+
+  private canTrimTo(trimIndex: number, minHttp: number): boolean {
+    let httpCount = 0;
+    for (let i = trimIndex; i < this.buffer.length; i++) {
+      if (this.buffer[i].type === 'http') {
+        httpCount++;
+        if (httpCount >= minHttp) return true;
+      }
+    }
+    return false;
+  }
+
+  private getSafeCutoff(minHttp: number): number {
+    let httpCount = 0;
+    for (let i = this.buffer.length - 1; i >= 0; i--) {
+      if (this.buffer[i].type === 'http') {
+        httpCount++;
+        if (httpCount >= minHttp) return i;
+      }
+    }
+    return 0;
   }
 
   private estimateBufferSize(): number {
