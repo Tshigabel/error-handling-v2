@@ -17,11 +17,17 @@ const errorTimelineConfig = {
     environment: environment.production ? 'production' : 'development',
   },
   retention: { maxAgeMs: 120000, minEvents: 10 },
-  ignoreUrls: [/\/health$/, /\/actuator/] as RegExp[],
+  ignoreUrls: [/\/health$/, /\/actuator/, /api\/configuration$/] as RegExp[],
   redactHeaders: ['authorization', 'cookie', 'set-cookie'],
   redactBodyKeys: ['password', 'token', 'secret'],
   maxBodyBytes: 65536,
   replay: { enabled: !environment.production },
+  recording: {
+    startRoute: '/landing-page',
+    resetRoutes: ['/landing-page'] as string[],
+    ignoreRoutes: ['/login'] as string[],
+    fileUploadEndpoints: [/\/api\/.*upload/, /\/api\/.*import/, /\/api\/.*attach/] as RegExp[],
+  },
 };
 
 @NgModule({

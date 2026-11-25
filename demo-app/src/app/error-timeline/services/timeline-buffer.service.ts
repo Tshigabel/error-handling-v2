@@ -9,14 +9,35 @@ import {
 export class TimelineBufferService {
   private buffer: TimelineEvent[] = [];
   private seq = 0;
+  private _recording = false;
+
+  get recording(): boolean {
+    return this._recording;
+  }
 
   constructor(
     @Inject(ERROR_TIMELINE_CONFIG) private config: ErrorTimelineConfig
   ) {}
 
+  startRecording(): void {
+    this._recording = true;
+  }
+
+  stopRecording(): void {
+    this._recording = false;
+  }
+
+  resetRecording(): void {
+    this.buffer = [];
+    this.seq = 0;
+    this._recording = true;
+  }
+
   append(
     event: Omit<TimelineEvent, 'id' | 'seq' | 'timestamp'>
-  ): TimelineEvent {
+  ): TimelineEvent | null {
+    if (!this._recording) return null;
+
     const entry: TimelineEvent = {
       ...event,
       id: this.uuid(),

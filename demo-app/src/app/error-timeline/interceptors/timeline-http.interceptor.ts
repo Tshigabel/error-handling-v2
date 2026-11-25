@@ -43,7 +43,11 @@ export class TimelineHttpInterceptor implements HttpInterceptor {
     );
 
     let requestBody = req.body;
-    if (requestBody != null) {
+    const isFileUpload = this.isFileUpload(req);
+
+    if (isFileUpload) {
+      requestBody = this.buildFileMetadata(req.body);
+    } else if (requestBody != null) {
       requestBody = RedactionUtil.redactBody(
         requestBody,
         this.config.redactBodyKeys
@@ -141,6 +145,46 @@ export class TimelineHttpInterceptor implements HttpInterceptor {
   private shouldIgnore(url: string): boolean {
     if (url.includes(this.config.reportEndpoint)) return true;
     return this.config.ignoreUrls.some((pattern) => pattern.test(url));
+  }
+
+  private isFileUpload(req: HttpRequest<any>): boolean {
+    if (req.body instanceof FormData) return true;
+    return this.config.recording.fileUploadEndpoints.some((pattern) =>
+      pattern.test(req.urlWithParams)
+    );
+  }
+
+  private buildFileMetadata(body: unknown): Record<string, unknown> {
+    const metadata: Record<string, unknown> = {
+      _placeholder: true,
+      _note: 'File content replaced with metadata to reduce recording size',
+    };
+
+    if (body instanceof FormData) {
+      const files: Record<string, unknown>[] = [];
+      body.forEach((value, key) => {
+        if (value instanceof File) {
+          files.push({
+            fieldName: key,
+            fileName: value.name,
+            fileSize: value.size,
+            fileType: value.type || 'unknown',
+            lastModified: new Date(value.lastModified).toISOString(),
+          });
+        } else {
+          if (!metadata['formFields']) {
+            metadata['formFields'] = {} as Record<string, string>;
+          }
+          (metadata['formFields'] as Record<string, string>)[key] = String(value);
+        }
+      });
+      metadata['files'] = files;
+    } else {
+      metadata['bodyType'] = typeof body;
+      metadata['bodySize'] = JSON.stringify(body).length;
+    }
+
+    return metadata;
   }
 
   private headersToRecord(headers: HttpHeaders): Record<string, string> {

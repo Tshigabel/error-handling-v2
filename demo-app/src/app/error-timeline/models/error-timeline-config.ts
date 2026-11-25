@@ -1,5 +1,12 @@
 import { InjectionToken } from '@angular/core';
 
+export interface RecordingRules {
+  startRoute: string;
+  resetRoutes: string[];
+  ignoreRoutes: string[];
+  fileUploadEndpoints: RegExp[];
+}
+
 export interface ErrorTimelineConfig {
   reportEndpoint: string;
   retention: {
@@ -18,6 +25,7 @@ export interface ErrorTimelineConfig {
   replay: {
     enabled: boolean;
   };
+  recording: RecordingRules;
 }
 
 export const DEFAULT_CONFIG: ErrorTimelineConfig = {
@@ -29,6 +37,12 @@ export const DEFAULT_CONFIG: ErrorTimelineConfig = {
   maxBodyBytes: 65_536,
   app: { name: '', version: '', environment: '' },
   replay: { enabled: false },
+  recording: {
+    startRoute: '/landing-page',
+    resetRoutes: [],
+    ignoreRoutes: ['/login'],
+    fileUploadEndpoints: [],
+  },
 };
 
 export const ERROR_TIMELINE_CONFIG = new InjectionToken<ErrorTimelineConfig>(

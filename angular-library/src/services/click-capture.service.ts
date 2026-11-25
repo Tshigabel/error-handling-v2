@@ -1,9 +1,13 @@
-import { Injectable, NgZone, OnDestroy } from '@angular/core';
+import { Inject, Injectable, NgZone, OnDestroy } from '@angular/core';
 import { Router, NavigationEnd } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { TimelineBufferService } from './timeline-buffer.service';
 import { ClickEvent } from '../models/timeline-event.model';
+import {
+  ERROR_TIMELINE_CONFIG,
+  ErrorTimelineConfig,
+} from '../models/error-timeline-config';
 
 const ACTIONABLE_SELECTORS = [
   'button',
@@ -22,14 +26,19 @@ export class ClickCaptureService implements OnDestroy {
   constructor(
     private buffer: TimelineBufferService,
     private router: Router,
-    private ngZone: NgZone
+    private ngZone: NgZone,
+    @Inject(ERROR_TIMELINE_CONFIG) private config: ErrorTimelineConfig
   ) {
     this.currentUrl = this.router.url;
+    this.evaluateRoute(this.currentUrl);
+
     this.routerSub = this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe((e) => {
         const from = this.currentUrl;
         this.currentUrl = e.urlAfterRedirects;
+        this.evaluateRoute(e.urlAfterRedirects);
+
         this.buffer.append({
           type: 'navigation',
           payload: { from, to: e.urlAfterRedirects },
@@ -60,6 +69,39 @@ export class ClickCaptureService implements OnDestroy {
       document.removeEventListener('click', this.clickHandler, true);
     }
     this.routerSub.unsubscribe();
+  }
+
+  private evaluateRoute(url: string): void {
+    const rules = this.config.recording;
+    const path = url.split('?')[0];
+
+    if (this.matchesRoute(path, rules.ignoreRoutes)) {
+      this.buffer.stopRecording();
+      return;
+    }
+
+    if (this.matchesRoute(path, rules.resetRoutes)) {
+      this.buffer.resetRecording();
+      return;
+    }
+
+    if (this.matchesRoute(path, [rules.startRoute])) {
+      if (!this.buffer.recording) {
+        this.buffer.startRecording();
+      }
+      return;
+    }
+
+    if (!this.buffer.recording && this.matchesRoute(path, [rules.startRoute])) {
+      this.buffer.startRecording();
+    }
+  }
+
+  private matchesRoute(url: string, routes: string[]): boolean {
+    return routes.some((route) => {
+      if (!route) return false;
+      return url === route || url.startsWith(route + '/');
+    });
   }
 
   private findActionableAncestor(el: Element): Element | null {
