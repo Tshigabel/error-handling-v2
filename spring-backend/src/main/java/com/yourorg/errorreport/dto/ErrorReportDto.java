@@ -14,7 +14,7 @@ public record ErrorReportDto(
         @NotNull @Valid SessionInfo session,
         @NotNull @Valid TriggeringError triggeringError,
         @NotBlank String initialRoute,
-        @NotNull @Size(max = 500) List<@Valid TimelineEventDto> timeline,
+        @NotNull @Size(max = 2000) List<@Valid TimelineEventDto> timeline,
         String userComment
 ) {
 

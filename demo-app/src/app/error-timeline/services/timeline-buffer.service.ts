@@ -1,5 +1,8 @@
 import { Inject, Injectable } from '@angular/core';
-import { TimelineEvent } from '../models/timeline-event.model';
+import {
+  NavigationEvent,
+  TimelineEvent,
+} from '../models/timeline-event.model';
 import {
   ERROR_TIMELINE_CONFIG,
   ErrorTimelineConfig,
@@ -47,11 +50,13 @@ export class TimelineBufferService {
 
     this.buffer.push(entry);
     this.prune();
+    this.trimBySize();
     return entry;
   }
 
   snapshot(): TimelineEvent[] {
     this.prune();
+    this.trimBySize();
     return [...this.buffer];
   }
 
@@ -84,6 +89,49 @@ export class TimelineBufferService {
     if (removeCount > 0) {
       this.buffer = this.buffer.slice(removeCount);
     }
+  }
+
+  private trimBySize(): void {
+    const threshold = this.config.recording.trimThresholdBytes;
+    if (!threshold || this.buffer.length === 0) return;
+
+    const currentSize = this.estimateBufferSize();
+    if (currentSize <= threshold) return;
+
+    const journeyRoutes = this.config.recording.startRoutes;
+    let trimIndex = -1;
+
+    for (let i = 1; i < this.buffer.length; i++) {
+      const event = this.buffer[i];
+      if (event.type === 'navigation') {
+        const nav = event.payload as NavigationEvent;
+        if (this.isJourneyRoute(nav.to, journeyRoutes)) {
+          trimIndex = i;
+        }
+      }
+    }
+
+    if (trimIndex > 0) {
+      this.buffer = this.buffer.slice(trimIndex);
+      return;
+    }
+
+    while (this.buffer.length > 1 && this.estimateBufferSize() > threshold) {
+      this.buffer.shift();
+    }
+  }
+
+  private isJourneyRoute(url: string, routes: string[]): boolean {
+    const path = url.split('?')[0];
+    return routes.some((route) => path.endsWith(route));
+  }
+
+  private estimateBufferSize(): number {
+    let size = 0;
+    for (const event of this.buffer) {
+      size += JSON.stringify(event).length;
+    }
+    return size;
   }
 
   private uuid(): string {

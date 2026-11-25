@@ -23,10 +23,12 @@ const errorTimelineConfig = {
   maxBodyBytes: 65536,
   replay: { enabled: !environment.production },
   recording: {
-    startRoute: '/landing-page',
-    resetRoutes: ['/landing-page'] as string[],
+    startRoutes: ['/landing-page', '/queue'] as string[],
+    resetRoutes: ['/landing-page', '/queue'] as string[],
     ignoreRoutes: ['/login'] as string[],
     fileUploadEndpoints: [/\/api\/.*upload/, /\/api\/.*import/, /\/api\/.*attach/] as RegExp[],
+    maxReportBytes: 2 * 1024 * 1024,
+    trimThresholdBytes: 1.5 * 1024 * 1024,
   },
 };
 

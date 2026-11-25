@@ -85,15 +85,11 @@ export class ClickCaptureService implements OnDestroy {
       return;
     }
 
-    if (this.matchesRoute(path, [rules.startRoute])) {
+    if (this.matchesRoute(path, rules.startRoutes)) {
       if (!this.buffer.recording) {
         this.buffer.startRecording();
       }
       return;
-    }
-
-    if (!this.buffer.recording && this.matchesRoute(path, [rules.startRoute])) {
-      this.buffer.startRecording();
     }
   }
 
