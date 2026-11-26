@@ -237,7 +237,7 @@ import {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         font-size: 12px;
         padding: 12px 16px;
-        z-index: 10001;
+        z-index: 9999;
         border-left: 2px solid #3182ce;
         box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
         transition: width 0.2s ease;
@@ -265,7 +265,7 @@ import {
         justify-content: center;
         writing-mode: vertical-rl;
         text-orientation: mixed;
-        z-index: 10002;
+        z-index: 9999;
         padding: 0;
       }
       .etl-collapse-toggle:hover { background: #2d3748; }
