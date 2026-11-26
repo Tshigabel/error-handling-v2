@@ -103,10 +103,10 @@ export class ClickCaptureService implements OnDestroy {
 
   private buildSelector(el: Element): string {
     const dataTestId = el.getAttribute('data-testid');
-    if (dataTestId) return `[data-testid="${dataTestId}"]`;
+    if (dataTestId) return `[data-testid="${CSS.escape(dataTestId)}"]`;
 
     const id = el.getAttribute('id');
-    if (id) return `#${id}`;
+    if (id) return `#${CSS.escape(id)}`;
 
     return this.buildCssPath(el, 5);
   }

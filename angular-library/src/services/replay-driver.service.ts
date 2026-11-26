@@ -243,9 +243,14 @@ export class ReplayDriverService {
     return new Promise((resolve) => {
       const start = Date.now();
       const poll = () => {
-        const el = document.querySelector(selector);
-        if (el) {
-          resolve(el);
+        try {
+          const el = document.querySelector(selector);
+          if (el) {
+            resolve(el);
+            return;
+          }
+        } catch {
+          resolve(null);
           return;
         }
         if (Date.now() - start > timeoutMs) {
