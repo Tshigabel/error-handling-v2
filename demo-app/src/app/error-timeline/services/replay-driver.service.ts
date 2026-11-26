@@ -4,6 +4,7 @@ import { BehaviorSubject, Subject } from 'rxjs';
 import { ReplayStateService } from './replay-state.service';
 import {
   ClickEvent,
+  InputChangeEvent,
   NavigationEvent,
   TimelineEvent,
 } from '../models/timeline-event.model';
@@ -115,6 +116,12 @@ export class ReplayDriverService {
         return;
       case 'click':
         this.handleClick(event.payload as ClickEvent).then(() => {
+          this.index++;
+          this.scheduleNext(event);
+        });
+        return;
+      case 'input':
+        this.handleInput(event.payload as InputChangeEvent).then(() => {
           this.index++;
           this.scheduleNext(event);
         });
@@ -311,6 +318,68 @@ export class ReplayDriverService {
     el.dispatchEvent(new MouseEvent('click', opts));
   }
 
+  private handleInput(input: InputChangeEvent): Promise<void> {
+    return this.findInputElement(input, 5000).then((target) => {
+      if (!target) {
+        this.log$.next(`WARNING: input element not found: ${input.selector}`);
+        return Promise.resolve();
+      }
+
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      return this.animateCursorTo(target).then(() => {
+        this.ngZone.run(() => {
+          this.setInputValue(target as HTMLElement, input);
+        });
+      });
+    });
+  }
+
+  private setInputValue(el: HTMLElement, input: InputChangeEvent): void {
+    const inputEl = el as HTMLInputElement;
+
+    if (input.inputType === 'checkbox' || input.inputType === 'radio') {
+      inputEl.checked = input.value as boolean;
+    } else if (input.elementTag === 'select') {
+      (el as HTMLSelectElement).value = input.value as string;
+    } else {
+      inputEl.value = input.value as string;
+    }
+
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+
+    this.highlightElement(el);
+  }
+
+  private findInputElement(input: InputChangeEvent, timeoutMs: number): Promise<Element | null> {
+    return new Promise((resolve) => {
+      const start = Date.now();
+      const poll = () => {
+        const el = this.resolveInputElement(input);
+        if (el) {
+          resolve(el);
+          return;
+        }
+        if (Date.now() - start > timeoutMs) {
+          resolve(null);
+          return;
+        }
+        setTimeout(poll, 200);
+      };
+      poll();
+    });
+  }
+
+  private resolveInputElement(input: InputChangeEvent): Element | null {
+    return this.trySelector(input.selector)
+      || this.tryDataTestId(input.dataTestId)
+      || this.tryId(input.elementId)
+      || this.tryAriaLabel(input.ariaLabel, input.elementTag)
+      || this.tryNameAttr(input.name, input.elementTag)
+      || this.tryClasses(input.classes, input.elementTag);
+  }
+
   private handleHttp(_event: TimelineEvent): void {
     // HTTP events are consumed passively by ReplayHttpInterceptor
   }
@@ -442,6 +511,8 @@ export class ReplayDriverService {
         return `${(event.payload as any).elementTag} "${(event.payload as any).elementText || ''}"`;
       case 'navigation':
         return `${(event.payload as any).from} → ${(event.payload as any).to}`;
+      case 'input':
+        return `${(event.payload as any).elementTag}[${(event.payload as any).name || (event.payload as any).elementId || ''}] = "${(event.payload as any).value}"`;
       case 'error':
         return (event.payload as any).message;
       default:

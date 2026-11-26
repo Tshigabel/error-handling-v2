@@ -2,8 +2,8 @@ export interface TimelineEvent {
   id: string;
   seq: number;
   timestamp: string;
-  type: 'http' | 'click' | 'navigation' | 'error';
-  payload: HttpEvent | ClickEvent | NavigationEvent | ErrorEvent;
+  type: 'http' | 'click' | 'navigation' | 'error' | 'input';
+  payload: HttpEvent | ClickEvent | NavigationEvent | ErrorEvent | InputChangeEvent;
 }
 
 export interface HttpEvent {
@@ -37,6 +37,21 @@ export interface ClickEvent {
 export interface NavigationEvent {
   from: string;
   to: string;
+}
+
+export interface InputChangeEvent {
+  selector: string;
+  elementTag: string;
+  inputType: string;
+  value: string | boolean;
+  elementId?: string;
+  dataTestId?: string;
+  ariaLabel?: string;
+  name?: string;
+  placeholder?: string;
+  label?: string;
+  classes?: string[];
+  routeUrl: string;
 }
 
 export interface ErrorEvent {

@@ -3,7 +3,7 @@ import { Router, NavigationEnd } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { TimelineBufferService } from './timeline-buffer.service';
-import { ClickEvent } from '../models/timeline-event.model';
+import { ClickEvent, InputChangeEvent } from '../models/timeline-event.model';
 
 const ACTIONABLE_SELECTORS = [
   'button',
@@ -13,11 +13,16 @@ const ACTIONABLE_SELECTORS = [
   '[data-testid]',
 ];
 
+const INPUT_DEBOUNCE_MS = 300;
+
 @Injectable()
 export class ClickCaptureService implements OnDestroy {
   private clickHandler: ((e: MouseEvent) => void) | null = null;
+  private inputHandler: ((e: Event) => void) | null = null;
+  private changeHandler: ((e: Event) => void) | null = null;
   private routerSub: Subscription;
   private currentUrl: string;
+  private inputDebounceMap = new Map<Element, any>();
 
   constructor(
     private buffer: TimelineBufferService,
@@ -53,14 +58,117 @@ export class ClickCaptureService implements OnDestroy {
       });
     };
 
+    this.inputHandler = (event: Event) => {
+      const el = event.target as HTMLElement;
+      if (!el || !this.isFormElement(el)) return;
+
+      const existing = this.inputDebounceMap.get(el);
+      if (existing) clearTimeout(existing);
+
+      this.inputDebounceMap.set(
+        el,
+        setTimeout(() => {
+          this.inputDebounceMap.delete(el);
+          this.recordInputChange(el);
+        }, INPUT_DEBOUNCE_MS)
+      );
+    };
+
+    this.changeHandler = (event: Event) => {
+      const el = event.target as HTMLElement;
+      if (!el || !this.isFormElement(el)) return;
+
+      const existing = this.inputDebounceMap.get(el);
+      if (existing) {
+        clearTimeout(existing);
+        this.inputDebounceMap.delete(el);
+      }
+
+      this.recordInputChange(el);
+    };
+
     document.addEventListener('click', this.clickHandler, true);
+    document.addEventListener('input', this.inputHandler, true);
+    document.addEventListener('change', this.changeHandler, true);
   }
 
   ngOnDestroy(): void {
     if (this.clickHandler) {
       document.removeEventListener('click', this.clickHandler, true);
     }
+    if (this.inputHandler) {
+      document.removeEventListener('input', this.inputHandler, true);
+    }
+    if (this.changeHandler) {
+      document.removeEventListener('change', this.changeHandler, true);
+    }
+    this.inputDebounceMap.forEach((timer) => clearTimeout(timer));
+    this.inputDebounceMap.clear();
     this.routerSub.unsubscribe();
+  }
+
+  private isFormElement(el: HTMLElement): boolean {
+    const tag = el.tagName.toLowerCase();
+    return tag === 'input' || tag === 'textarea' || tag === 'select';
+  }
+
+  private recordInputChange(el: HTMLElement): void {
+    const payload = this.buildInputEvent(el);
+
+    this.ngZone.runOutsideAngular(() => {
+      this.buffer.append({ type: 'input', payload });
+    });
+  }
+
+  private buildInputEvent(el: HTMLElement): InputChangeEvent {
+    const inputEl = el as HTMLInputElement;
+    const tag = el.tagName.toLowerCase();
+    const inputType = inputEl.type || tag;
+
+    let value: string | boolean;
+    if (inputType === 'checkbox' || inputType === 'radio') {
+      value = inputEl.checked;
+    } else if (tag === 'select') {
+      value = (el as HTMLSelectElement).value;
+    } else {
+      value = inputEl.value;
+    }
+
+    const dataTestId = el.getAttribute('data-testid') || undefined;
+    const id = el.getAttribute('id') || undefined;
+    const ariaLabel = el.getAttribute('aria-label') || undefined;
+    const name = el.getAttribute('name') || undefined;
+    const placeholder = inputEl.placeholder || undefined;
+    const classList = Array.from(el.classList);
+
+    let label: string | undefined;
+    if (id) {
+      const labelEl = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+      if (labelEl) {
+        label = (labelEl.textContent || '').trim().substring(0, 80) || undefined;
+      }
+    }
+    if (!label) {
+      const parentLabel = el.closest('label');
+      if (parentLabel) {
+        label = (parentLabel.textContent || '').trim().substring(0, 80) || undefined;
+      }
+    }
+
+    return {
+      selector: this.buildSelector(el),
+      elementTag: tag,
+      inputType,
+      value,
+      elementId: id,
+      dataTestId,
+      ariaLabel,
+      name,
+      placeholder,
+      label,
+      classes: classList.length > 0 ? classList : undefined,
+      routeUrl: this.currentUrl,
+    };
   }
 
   private findActionableAncestor(el: Element): Element | null {
