@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, Renderer2, ViewChild } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { ReplayStateService } from '../../services/replay-state.service';
 import {
@@ -219,10 +219,10 @@ import {
     `
       .etl-replay-panel {
         position: fixed;
-        bottom: 0;
-        left: 0;
+        top: 0;
         right: 0;
-        max-height: 70vh;
+        bottom: 0;
+        width: 420px;
         overflow-y: auto;
         background: #1a202c;
         color: #e2e8f0;
@@ -230,16 +230,19 @@ import {
         font-size: 12px;
         padding: 12px 16px;
         z-index: 10001;
-        border-top: 2px solid #3182ce;
+        border-left: 2px solid #3182ce;
+        box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
       }
       h3 { margin: 0 0 8px; font-size: 14px; }
       h4 { margin: 0 0 6px; font-size: 12px; color: #90cdf4; }
-      .etl-replay-load-options { display: flex; gap: 16px; flex-wrap: wrap; }
-      .etl-replay-load-options input { padding: 4px 8px; }
-      .etl-replay-load-options button { margin-left: 4px; }
+      .etl-replay-load-options { display: flex; flex-direction: column; gap: 12px; }
+      .etl-replay-load-options > div { display: flex; flex-direction: column; gap: 4px; }
+      .etl-replay-load-options input { padding: 4px 8px; box-sizing: border-box; }
+      .etl-replay-load-options button { align-self: flex-start; }
 
-      .etl-replay-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
-      .etl-replay-buttons { display: flex; gap: 6px; align-items: center; }
+      .etl-replay-header { display: flex; flex-direction: column; gap: 8px; }
+      .etl-replay-header h3 { font-size: 13px; word-break: break-word; }
+      .etl-replay-buttons { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
       .etl-replay-buttons button,
       .etl-replay-buttons select {
         padding: 4px 10px;
@@ -256,14 +259,13 @@ import {
       /* Search bar */
       .etl-search-bar {
         display: flex;
-        align-items: center;
-        gap: 8px;
+        flex-direction: column;
+        gap: 6px;
         margin: 8px 0;
-        flex-wrap: wrap;
       }
       .etl-search-bar input {
-        flex: 1;
-        min-width: 200px;
+        width: 100%;
+        box-sizing: border-box;
         padding: 6px 10px;
         background: #171923;
         color: #e2e8f0;
@@ -272,7 +274,7 @@ import {
         font-size: 12px;
       }
       .etl-search-bar input::placeholder { color: #718096; }
-      .etl-filter-chips { display: flex; gap: 4px; }
+      .etl-filter-chips { display: flex; gap: 4px; flex-wrap: wrap; }
       .etl-chip {
         padding: 2px 8px;
         background: #2d3748;
@@ -288,7 +290,7 @@ import {
 
       /* Event list */
       .etl-event-list {
-        max-height: 180px;
+        max-height: 35vh;
         overflow-y: auto;
         border: 1px solid #2d3748;
         border-radius: 4px;
@@ -322,7 +324,7 @@ import {
       .etl-col-type[data-type="error"] { color: #feb2b2; }
       .etl-col-summary { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .etl-col-status { width: 36px; flex-shrink: 0; text-align: center; font-weight: 600; border-radius: 3px; padding: 1px 4px; font-size: 11px; }
-      .etl-col-time { color: #718096; flex-shrink: 0; font-family: 'Fira Code', monospace; font-size: 11px; }
+      .etl-col-time { display: none; }
 
       /* Detail panel */
       .etl-detail-panel {
@@ -420,10 +422,13 @@ export class ReplayPanelComponent implements OnInit, OnDestroy {
 
   private subs: Subscription[] = [];
 
+  private readonly PANEL_WIDTH = '420px';
+
   constructor(
     private replayState: ReplayStateService,
     public driver: ReplayDriverService,
-    private reportService: ErrorReportService
+    private reportService: ErrorReportService,
+    private renderer: Renderer2
   ) {}
 
   ngOnInit(): void {
@@ -444,6 +449,7 @@ export class ReplayPanelComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.subs.forEach((s) => s.unsubscribe());
+    this.shrinkBody(false);
   }
 
   fetchReport(): void {
@@ -621,6 +627,7 @@ export class ReplayPanelComponent implements OnInit, OnDestroy {
     this.selectedEvent = null;
     this.searchTerm = '';
     this.activeFilter = null;
+    this.shrinkBody(false);
   }
 
   private loadReport(report: ErrorReport): void {
@@ -630,5 +637,19 @@ export class ReplayPanelComponent implements OnInit, OnDestroy {
     this.loaded = true;
     this.replayState.load(report);
     this.logs.push(`Loaded report ${report.reportId} with ${report.timeline.length} events.`);
+    this.shrinkBody(true);
+  }
+
+  private shrinkBody(shrink: boolean): void {
+    this.renderer.setStyle(
+      document.body,
+      'marginRight',
+      shrink ? this.PANEL_WIDTH : ''
+    );
+    this.renderer.setStyle(
+      document.body,
+      'transition',
+      'margin-right 0.2s ease'
+    );
   }
 }
