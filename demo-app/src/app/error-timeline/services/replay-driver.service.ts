@@ -132,16 +132,52 @@ export class ReplayDriverService {
 
   private handleClick(click: ClickEvent): void {
     this.waitForElement(click.selector, 5000).then((el) => {
-      if (!el) {
+      const target = el || this.findByCoordinates(click);
+
+      if (!target) {
         this.log$.next(`WARNING: element not found: ${click.selector}`);
         return;
       }
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      this.highlightElement(el);
+
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      this.highlightElement(target);
+
+      const coords = this.scaleCoordinates(click);
       this.ngZone.run(() => {
-        (el as HTMLElement).click();
+        this.dispatchMouseSequence(target as HTMLElement, coords);
       });
     });
+  }
+
+  private findByCoordinates(click: ClickEvent): Element | null {
+    if (click.clientX == null || click.clientY == null) return null;
+    const coords = this.scaleCoordinates(click);
+    return document.elementFromPoint(coords.clientX, coords.clientY);
+  }
+
+  private scaleCoordinates(click: ClickEvent): { clientX: number; clientY: number } {
+    if (!click.viewportWidth || !click.viewportHeight) {
+      return { clientX: click.clientX, clientY: click.clientY };
+    }
+    const scaleX = window.innerWidth / click.viewportWidth;
+    const scaleY = window.innerHeight / click.viewportHeight;
+    return {
+      clientX: Math.round(click.clientX * scaleX),
+      clientY: Math.round(click.clientY * scaleY),
+    };
+  }
+
+  private dispatchMouseSequence(el: HTMLElement, coords: { clientX: number; clientY: number }): void {
+    const opts: MouseEventInit = {
+      bubbles: true,
+      cancelable: true,
+      clientX: coords.clientX,
+      clientY: coords.clientY,
+      button: 0,
+    };
+    el.dispatchEvent(new MouseEvent('mousedown', opts));
+    el.dispatchEvent(new MouseEvent('mouseup', opts));
+    el.dispatchEvent(new MouseEvent('click', opts));
   }
 
   private handleHttp(_event: TimelineEvent): void {

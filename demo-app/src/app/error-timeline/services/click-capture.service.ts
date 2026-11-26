@@ -46,7 +46,7 @@ export class ClickCaptureService implements OnDestroy {
       const actionable = this.findActionableAncestor(target);
       if (!actionable) return;
 
-      const payload = this.buildClickEvent(actionable);
+      const payload = this.buildClickEvent(actionable, event);
 
       this.ngZone.runOutsideAngular(() => {
         this.buffer.append({ type: 'click', payload });
@@ -82,7 +82,7 @@ export class ClickCaptureService implements OnDestroy {
     });
   }
 
-  private buildClickEvent(el: Element): ClickEvent {
+  private buildClickEvent(el: Element, event: MouseEvent): ClickEvent {
     const dataTestId = el.getAttribute('data-testid');
     const text = (el.textContent || '').trim().substring(0, 80) || undefined;
 
@@ -92,6 +92,12 @@ export class ClickCaptureService implements OnDestroy {
       elementText: text,
       dataTestId: dataTestId || undefined,
       routeUrl: this.currentUrl,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      pageX: event.pageX,
+      pageY: event.pageY,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
     };
   }
 

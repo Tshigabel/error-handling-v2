@@ -27,6 +27,12 @@ export interface ClickEvent {
   elementText?: string;
   dataTestId?: string;
   routeUrl: string;
+  clientX: number;
+  clientY: number;
+  pageX: number;
+  pageY: number;
+  viewportWidth: number;
+  viewportHeight: number;
 }
 
 export interface NavigationEvent {
