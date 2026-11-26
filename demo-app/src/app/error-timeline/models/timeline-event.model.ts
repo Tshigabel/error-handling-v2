@@ -26,13 +26,12 @@ export interface ClickEvent {
   elementTag: string;
   elementText?: string;
   dataTestId?: string;
+  elementId?: string;
+  ariaLabel?: string;
+  role?: string;
+  name?: string;
+  classes?: string[];
   routeUrl: string;
-  clientX: number;
-  clientY: number;
-  pageX: number;
-  pageY: number;
-  viewportWidth: number;
-  viewportHeight: number;
 }
 
 export interface NavigationEvent {

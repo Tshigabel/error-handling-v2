@@ -19,6 +19,7 @@ export class ReplayDriverService {
   private index = 0;
   private speed = 1;
   private timeoutId: any = null;
+  private cursorEl: HTMLElement | null = null;
 
   constructor(
     private replayState: ReplayStateService,
@@ -38,6 +39,8 @@ export class ReplayDriverService {
       this.status$.next('finished');
       return;
     }
+
+    this.ensureCursor();
 
     if (this.index === 0) {
       const report = this.replayState.getReport();
@@ -70,6 +73,7 @@ export class ReplayDriverService {
       this.status$.next('finished');
       return;
     }
+    this.ensureCursor();
     this.executeEvent(timeline[this.index]);
   }
 
@@ -78,6 +82,7 @@ export class ReplayDriverService {
     this.index = 0;
     this.currentEvent$.next(null);
     this.status$.next('idle');
+    this.removeCursor();
   }
 
   private processNext(): void {
@@ -86,6 +91,7 @@ export class ReplayDriverService {
     if (this.index >= timeline.length) {
       this.status$.next('finished');
       this.log$.next('Replay finished.');
+      this.removeCursor();
       return;
     }
 
@@ -134,26 +140,128 @@ export class ReplayDriverService {
   }
 
   private handleClick(click: ClickEvent): Promise<void> {
-    return this.waitForElement(click.selector, 5000).then((el) => {
-      const target = el || this.findByCoordinates(click);
-
+    return this.findElement(click, 5000).then((target) => {
       if (!target) {
         this.log$.next(`WARNING: element not found: ${click.selector}`);
         return Promise.resolve();
       }
 
       target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      this.highlightElement(target);
 
-      const coords = this.scaleCoordinates(click);
-      return this.clickAndWaitForDomChange(target as HTMLElement, coords);
+      return this.animateCursorTo(target).then(() => {
+        return this.clickAndWaitForDomChange(target as HTMLElement);
+      });
     });
   }
 
-  private clickAndWaitForDomChange(
-    el: HTMLElement,
-    coords: { clientX: number; clientY: number }
-  ): Promise<void> {
+  private findElement(click: ClickEvent, timeoutMs: number): Promise<Element | null> {
+    return new Promise((resolve) => {
+      const start = Date.now();
+      const poll = () => {
+        const el = this.resolveElement(click);
+        if (el) {
+          resolve(el);
+          return;
+        }
+        if (Date.now() - start > timeoutMs) {
+          resolve(null);
+          return;
+        }
+        setTimeout(poll, 200);
+      };
+      poll();
+    });
+  }
+
+  private resolveElement(click: ClickEvent): Element | null {
+    return this.trySelector(click.selector)
+      || this.tryDataTestId(click.dataTestId)
+      || this.tryId(click.elementId)
+      || this.tryAriaLabel(click.ariaLabel, click.elementTag)
+      || this.tryNameAttr(click.name, click.elementTag)
+      || this.tryRoleAndText(click.role, click.elementText, click.elementTag)
+      || this.tryTagAndText(click.elementTag, click.elementText)
+      || this.tryClasses(click.classes, click.elementTag);
+  }
+
+  private trySelector(selector: string): Element | null {
+    if (!selector) return null;
+    try {
+      return document.querySelector(selector);
+    } catch {
+      return null;
+    }
+  }
+
+  private tryDataTestId(testId: string | undefined): Element | null {
+    if (!testId) return null;
+    try {
+      return document.querySelector(`[data-testid="${CSS.escape(testId)}"]`);
+    } catch {
+      return null;
+    }
+  }
+
+  private tryId(id: string | undefined): Element | null {
+    if (!id) return null;
+    return document.getElementById(id);
+  }
+
+  private tryAriaLabel(label: string | undefined, tag: string): Element | null {
+    if (!label) return null;
+    try {
+      return document.querySelector(`${tag}[aria-label="${CSS.escape(label)}"]`)
+        || document.querySelector(`[aria-label="${CSS.escape(label)}"]`);
+    } catch {
+      return null;
+    }
+  }
+
+  private tryNameAttr(name: string | undefined, tag: string): Element | null {
+    if (!name) return null;
+    try {
+      return document.querySelector(`${tag}[name="${CSS.escape(name)}"]`);
+    } catch {
+      return null;
+    }
+  }
+
+  private tryRoleAndText(role: string | undefined, text: string | undefined, tag: string): Element | null {
+    if (!role || !text) return null;
+    const selector = role ? `${tag}[role="${CSS.escape(role)}"]` : tag;
+    try {
+      const candidates = document.querySelectorAll(selector);
+      for (let i = 0; i < candidates.length; i++) {
+        const elText = (candidates[i].textContent || '').trim().substring(0, 80);
+        if (elText === text) return candidates[i];
+      }
+    } catch {}
+    return null;
+  }
+
+  private tryTagAndText(tag: string, text: string | undefined): Element | null {
+    if (!text || !tag) return null;
+    try {
+      const candidates = document.querySelectorAll(tag);
+      for (let i = 0; i < candidates.length; i++) {
+        const elText = (candidates[i].textContent || '').trim().substring(0, 80);
+        if (elText === text) return candidates[i];
+      }
+    } catch {}
+    return null;
+  }
+
+  private tryClasses(classes: string[] | undefined, tag: string): Element | null {
+    if (!classes || classes.length === 0 || !tag) return null;
+    try {
+      const selector = tag + classes.map((c) => `.${CSS.escape(c)}`).join('');
+      const candidates = document.querySelectorAll(selector);
+      if (candidates.length === 1) return candidates[0];
+    } catch {}
+    return null;
+  }
+
+  private clickAndWaitForDomChange(el: HTMLElement): Promise<void> {
     return new Promise<void>((resolve) => {
       let debounceTimer: any = null;
       let resolved = false;
@@ -179,37 +287,23 @@ export class ReplayDriverService {
       });
 
       this.ngZone.run(() => {
-        this.dispatchMouseSequence(el, coords);
+        this.dispatchMouseSequence(el);
       });
 
       setTimeout(done, 2000);
     });
   }
 
-  private findByCoordinates(click: ClickEvent): Element | null {
-    if (click.clientX == null || click.clientY == null) return null;
-    const coords = this.scaleCoordinates(click);
-    return document.elementFromPoint(coords.clientX, coords.clientY);
-  }
+  private dispatchMouseSequence(el: HTMLElement): void {
+    const rect = el.getBoundingClientRect();
+    const cx = Math.round(rect.left + rect.width / 2);
+    const cy = Math.round(rect.top + rect.height / 2);
 
-  private scaleCoordinates(click: ClickEvent): { clientX: number; clientY: number } {
-    if (!click.viewportWidth || !click.viewportHeight) {
-      return { clientX: click.clientX, clientY: click.clientY };
-    }
-    const scaleX = window.innerWidth / click.viewportWidth;
-    const scaleY = window.innerHeight / click.viewportHeight;
-    return {
-      clientX: Math.round(click.clientX * scaleX),
-      clientY: Math.round(click.clientY * scaleY),
-    };
-  }
-
-  private dispatchMouseSequence(el: HTMLElement, coords: { clientX: number; clientY: number }): void {
     const opts: MouseEventInit = {
       bubbles: true,
       cancelable: true,
-      clientX: coords.clientX,
-      clientY: coords.clientY,
+      clientX: cx,
+      clientY: cy,
       button: 0,
     };
     el.dispatchEvent(new MouseEvent('mousedown', opts));
@@ -225,6 +319,7 @@ export class ReplayDriverService {
     const timeline = this.replayState.getTimeline();
     if (this.index >= timeline.length) {
       this.status$.next('finished');
+      this.removeCursor();
       return;
     }
 
@@ -236,32 +331,101 @@ export class ReplayDriverService {
     this.timeoutId = setTimeout(() => this.processNext(), delay);
   }
 
-  private waitForElement(
-    selector: string,
-    timeoutMs: number
-  ): Promise<Element | null> {
+  // ── Visual cursor ──
+
+  private ensureCursor(): void {
+    if (this.cursorEl && document.body.contains(this.cursorEl)) return;
+
+    const el = document.createElement('div');
+    el.id = 'replay-cursor';
+    el.style.cssText = [
+      'position: fixed',
+      'width: 20px',
+      'height: 20px',
+      'border-radius: 50%',
+      'background: rgba(49, 130, 206, 0.6)',
+      'border: 2px solid #3182ce',
+      'pointer-events: none',
+      'z-index: 999999',
+      'transition: left 0.3s ease, top 0.3s ease',
+      'transform: translate(-50%, -50%)',
+      'box-shadow: 0 0 12px rgba(49, 130, 206, 0.4)',
+      'left: 50%',
+      'top: 50%',
+    ].join('; ');
+    document.body.appendChild(el);
+    this.cursorEl = el;
+  }
+
+  private removeCursor(): void {
+    if (this.cursorEl && this.cursorEl.parentNode) {
+      this.cursorEl.parentNode.removeChild(this.cursorEl);
+    }
+    this.cursorEl = null;
+  }
+
+  private animateCursorTo(target: Element): Promise<void> {
     return new Promise((resolve) => {
-      const start = Date.now();
-      const poll = () => {
-        try {
-          const el = document.querySelector(selector);
-          if (el) {
-            resolve(el);
-            return;
-          }
-        } catch {
-          resolve(null);
-          return;
+      if (!this.cursorEl) {
+        resolve();
+        return;
+      }
+
+      const rect = target.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+
+      this.cursorEl.style.left = `${cx}px`;
+      this.cursorEl.style.top = `${cy}px`;
+
+      const onEnd = () => {
+        if (this.cursorEl) {
+          this.cursorEl.removeEventListener('transitionend', onEnd);
         }
-        if (Date.now() - start > timeoutMs) {
-          resolve(null);
-          return;
-        }
-        setTimeout(poll, 200);
+        this.showClickRipple(cx, cy);
+        resolve();
       };
-      poll();
+
+      this.cursorEl.addEventListener('transitionend', onEnd);
+      setTimeout(onEnd, 400);
     });
   }
+
+  private showClickRipple(x: number, y: number): void {
+    const ripple = document.createElement('div');
+    ripple.style.cssText = [
+      'position: fixed',
+      'pointer-events: none',
+      'z-index: 999998',
+      'border-radius: 50%',
+      'border: 2px solid #3182ce',
+      'width: 10px',
+      'height: 10px',
+      'transform: translate(-50%, -50%)',
+      'animation: replay-ripple 0.5s ease-out forwards',
+      `left: ${x}px`,
+      `top: ${y}px`,
+    ].join('; ');
+
+    if (!document.getElementById('replay-ripple-style')) {
+      const style = document.createElement('style');
+      style.id = 'replay-ripple-style';
+      style.textContent = `
+        @keyframes replay-ripple {
+          0%   { width: 10px; height: 10px; opacity: 1; }
+          100% { width: 50px; height: 50px; opacity: 0; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    document.body.appendChild(ripple);
+    setTimeout(() => {
+      if (ripple.parentNode) ripple.parentNode.removeChild(ripple);
+    }, 600);
+  }
+
+  // ── Helpers ──
 
   private highlightElement(el: Element): void {
     const htmlEl = el as HTMLElement;
