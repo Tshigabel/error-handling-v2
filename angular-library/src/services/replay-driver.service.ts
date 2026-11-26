@@ -108,8 +108,11 @@ export class ReplayDriverService {
         });
         return;
       case 'click':
-        this.handleClick(event.payload as ClickEvent);
-        break;
+        this.handleClick(event.payload as ClickEvent).then(() => {
+          this.index++;
+          this.scheduleNext(event);
+        });
+        return;
       case 'http':
         this.handleHttp(event);
         break;
@@ -130,22 +133,56 @@ export class ReplayDriverService {
     });
   }
 
-  private handleClick(click: ClickEvent): void {
-    this.waitForElement(click.selector, 5000).then((el) => {
+  private handleClick(click: ClickEvent): Promise<void> {
+    return this.waitForElement(click.selector, 5000).then((el) => {
       const target = el || this.findByCoordinates(click);
 
       if (!target) {
         this.log$.next(`WARNING: element not found: ${click.selector}`);
-        return;
+        return Promise.resolve();
       }
 
       target.scrollIntoView({ behavior: 'smooth', block: 'center' });
       this.highlightElement(target);
 
       const coords = this.scaleCoordinates(click);
-      this.ngZone.run(() => {
-        this.dispatchMouseSequence(target as HTMLElement, coords);
+      return this.clickAndWaitForDomChange(target as HTMLElement, coords);
+    });
+  }
+
+  private clickAndWaitForDomChange(
+    el: HTMLElement,
+    coords: { clientX: number; clientY: number }
+  ): Promise<void> {
+    return new Promise<void>((resolve) => {
+      let debounceTimer: any = null;
+      let resolved = false;
+
+      const done = () => {
+        if (resolved) return;
+        resolved = true;
+        observer.disconnect();
+        if (debounceTimer) clearTimeout(debounceTimer);
+        resolve();
+      };
+
+      const observer = new MutationObserver(() => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(done, 150);
       });
+
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        characterData: true,
+      });
+
+      this.ngZone.run(() => {
+        this.dispatchMouseSequence(el, coords);
+      });
+
+      setTimeout(done, 2000);
     });
   }
 
