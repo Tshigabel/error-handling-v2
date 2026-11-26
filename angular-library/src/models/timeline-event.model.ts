@@ -30,6 +30,7 @@ export interface ClickEvent {
   ariaLabel?: string;
   role?: string;
   name?: string;
+  formControlName?: string;
   classes?: string[];
   routeUrl: string;
 }
@@ -48,6 +49,7 @@ export interface InputChangeEvent {
   dataTestId?: string;
   ariaLabel?: string;
   name?: string;
+  formControlName?: string;
   placeholder?: string;
   label?: string;
   classes?: string[];

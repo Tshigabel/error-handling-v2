@@ -184,6 +184,7 @@ export class ReplayDriverService {
     return this.trySelector(click.selector)
       || this.tryDataTestId(click.dataTestId)
       || this.tryId(click.elementId)
+      || this.tryFormControlName(click.formControlName, click.elementTag)
       || this.tryAriaLabel(click.ariaLabel, click.elementTag)
       || this.tryNameAttr(click.name, click.elementTag)
       || this.tryRoleAndText(click.role, click.elementText, click.elementTag)
@@ -212,6 +213,18 @@ export class ReplayDriverService {
   private tryId(id: string | undefined): Element | null {
     if (!id) return null;
     return document.getElementById(id);
+  }
+
+  private tryFormControlName(fcn: string | undefined, tag: string): Element | null {
+    if (!fcn) return null;
+    try {
+      return document.querySelector(`${tag}[formcontrolname="${CSS.escape(fcn)}"]`)
+        || document.querySelector(`[formcontrolname="${CSS.escape(fcn)}"]`)
+        || document.querySelector(`${tag}[ng-reflect-name="${CSS.escape(fcn)}"]`)
+        || document.querySelector(`[ng-reflect-name="${CSS.escape(fcn)}"]`);
+    } catch {
+      return null;
+    }
   }
 
   private tryAriaLabel(label: string | undefined, tag: string): Element | null {
@@ -375,6 +388,7 @@ export class ReplayDriverService {
     return this.trySelector(input.selector)
       || this.tryDataTestId(input.dataTestId)
       || this.tryId(input.elementId)
+      || this.tryFormControlName(input.formControlName, input.elementTag)
       || this.tryAriaLabel(input.ariaLabel, input.elementTag)
       || this.tryNameAttr(input.name, input.elementTag)
       || this.tryClasses(input.classes, input.elementTag);

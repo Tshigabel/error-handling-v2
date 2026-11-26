@@ -417,7 +417,7 @@ export class ReplayPanelComponent implements OnInit, OnDestroy {
   selectedEvent: TimelineEvent | null = null;
   detailTab = 'overview';
 
-  filterTypes = ['all', 'http', 'click', 'navigation', 'error'];
+  filterTypes = ['all', 'http', 'click', 'navigation', 'input', 'error'];
   objectKeys = Object.keys;
 
   private subs: Subscription[] = [];

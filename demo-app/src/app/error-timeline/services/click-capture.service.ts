@@ -10,7 +10,15 @@ const ACTIONABLE_SELECTORS = [
   'a',
   '[role="button"]',
   'input[type="submit"]',
+  'input[type="checkbox"]',
+  'input[type="radio"]',
   '[data-testid]',
+  'select',
+  'ng-select',
+  'label',
+  'ngb-alert',
+  'ngb-accordion',
+  'ngb-panel',
 ];
 
 const INPUT_DEBOUNCE_MS = 300;
@@ -138,6 +146,8 @@ export class ClickCaptureService implements OnDestroy {
     const id = el.getAttribute('id') || undefined;
     const ariaLabel = el.getAttribute('aria-label') || undefined;
     const name = el.getAttribute('name') || undefined;
+    const formControlName = el.getAttribute('formcontrolname')
+      || el.getAttribute('ng-reflect-name') || undefined;
     const placeholder = inputEl.placeholder || undefined;
     const classList = Array.from(el.classList);
 
@@ -164,6 +174,7 @@ export class ClickCaptureService implements OnDestroy {
       dataTestId,
       ariaLabel,
       name,
+      formControlName,
       placeholder,
       label,
       classes: classList.length > 0 ? classList : undefined,
@@ -181,6 +192,8 @@ export class ClickCaptureService implements OnDestroy {
   }
 
   private isActionable(el: Element): boolean {
+    const tag = el.tagName.toLowerCase();
+    if (tag.startsWith('solar-')) return true;
     return ACTIONABLE_SELECTORS.some((sel) => {
       try {
         return el.matches(sel);
@@ -197,6 +210,8 @@ export class ClickCaptureService implements OnDestroy {
     const ariaLabel = el.getAttribute('aria-label') || undefined;
     const role = el.getAttribute('role') || undefined;
     const name = el.getAttribute('name') || undefined;
+    const formControlName = el.getAttribute('formcontrolname')
+      || el.getAttribute('ng-reflect-name') || undefined;
     const classList = Array.from(el.classList);
 
     return {
@@ -208,6 +223,7 @@ export class ClickCaptureService implements OnDestroy {
       ariaLabel,
       role,
       name,
+      formControlName,
       classes: classList.length > 0 ? classList : undefined,
       routeUrl: this.currentUrl,
     };
