@@ -18,7 +18,14 @@ import {
 @Component({
   selector: 'etl-replay-panel',
   template: `
-    <div class="etl-replay-panel" *ngIf="active">
+    <div class="etl-replay-panel" *ngIf="active" [class.etl-collapsed]="collapsed">
+      <!-- Collapse/expand toggle tab -->
+      <button class="etl-collapse-toggle" (click)="toggleCollapse()" [attr.title]="collapsed ? 'Expand panel' : 'Collapse panel'">
+        <span *ngIf="collapsed">&#9664; Replay</span>
+        <span *ngIf="!collapsed">&#9654;</span>
+      </button>
+
+      <div class="etl-panel-content" *ngIf="!collapsed">
       <!-- Load section -->
       <div *ngIf="!loaded" class="etl-replay-load">
         <h3>Load Error Report</h3>
@@ -213,6 +220,7 @@ import {
           <div *ngFor="let msg of logs">{{ msg }}</div>
         </div>
       </div>
+      </div>
     </div>
   `,
   styles: [
@@ -232,6 +240,42 @@ import {
         z-index: 10001;
         border-left: 2px solid #3182ce;
         box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
+        transition: width 0.2s ease;
+      }
+      .etl-replay-panel.etl-collapsed {
+        width: 36px;
+        padding: 0;
+        overflow: hidden;
+      }
+      .etl-collapse-toggle {
+        position: absolute;
+        top: 8px;
+        left: -28px;
+        width: 28px;
+        height: 72px;
+        background: #1a202c;
+        color: #90cdf4;
+        border: 2px solid #3182ce;
+        border-right: none;
+        border-radius: 6px 0 0 6px;
+        cursor: pointer;
+        font-size: 11px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+        z-index: 10002;
+        padding: 0;
+      }
+      .etl-collapse-toggle:hover { background: #2d3748; }
+      .etl-collapsed .etl-collapse-toggle {
+        height: 100px;
+      }
+      .etl-panel-content {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
       }
       h3 { margin: 0 0 8px; font-size: 14px; }
       h4 { margin: 0 0 6px; font-size: 12px; color: #90cdf4; }
@@ -404,6 +448,7 @@ export class ReplayPanelComponent implements OnInit, OnDestroy {
 
   active = false;
   loaded = false;
+  collapsed = false;
   report: ErrorReport | null = null;
   timeline: TimelineEvent[] = [];
   filteredTimeline: TimelineEvent[] = [];
@@ -474,6 +519,13 @@ export class ReplayPanelComponent implements OnInit, OnDestroy {
       }
     };
     reader.readAsText(input.files[0]);
+  }
+
+  toggleCollapse(): void {
+    this.collapsed = !this.collapsed;
+    if (this.loaded) {
+      this.shrinkBody(!this.collapsed);
+    }
   }
 
   onSpeedChange(): void {
