@@ -32,6 +32,7 @@ export class ReplayDriverService {
   private timeoutId: any = null;
   private cursorEl: HTMLElement | null = null;
   private stuckResolve: (() => void) | null = null;
+  private errorModalObserver: MutationObserver | null = null;
 
   constructor(
     private replayState: ReplayStateService,
@@ -73,6 +74,7 @@ export class ReplayDriverService {
     }
 
     this.ensureCursor();
+    this.startErrorModalWatcher();
 
     if (this.index === 0) {
       const report = this.replayState.getReport();
@@ -117,6 +119,7 @@ export class ReplayDriverService {
     this.stuckResolve = null;
     this.status$.next('idle');
     this.removeCursor();
+    this.stopErrorModalWatcher();
   }
 
   private processNext(): void {
@@ -126,6 +129,7 @@ export class ReplayDriverService {
       this.status$.next('finished');
       this.log$.next('Replay finished.');
       this.removeCursor();
+      this.stopErrorModalWatcher();
       return;
     }
 
@@ -342,16 +346,41 @@ export class ReplayDriverService {
       observer.observe(document.body, {
         childList: true,
         subtree: true,
-        attributes: true,
-        characterData: true,
+        attributes: false,
+        characterData: false,
       });
 
       this.ngZone.run(() => {
-        this.dispatchMouseSequence(el);
+        if (this.isNgSelectElement(el)) {
+          this.clickNgSelect(el);
+        } else {
+          this.dispatchMouseSequence(el);
+        }
       });
 
       setTimeout(done, 2000);
     });
+  }
+
+  private isNgSelectElement(el: HTMLElement): boolean {
+    const tag = el.tagName.toLowerCase();
+    return tag === 'ng-select' || tag.startsWith('solar-') && !!el.querySelector('ng-select');
+  }
+
+  private clickNgSelect(el: HTMLElement): void {
+    const ngSelect = el.tagName.toLowerCase() === 'ng-select'
+      ? el
+      : el.querySelector('ng-select');
+    if (!ngSelect) {
+      el.click();
+      return;
+    }
+    const container = ngSelect.querySelector('.ng-select-container') as HTMLElement;
+    if (container) {
+      container.click();
+    } else {
+      (ngSelect as HTMLElement).click();
+    }
   }
 
   private dispatchMouseSequence(el: HTMLElement): void {
@@ -466,6 +495,70 @@ export class ReplayDriverService {
     const delay = Math.max(0, (nextTs - currentTs) / this.speed);
 
     this.timeoutId = setTimeout(() => this.processNext(), delay);
+  }
+
+  // ── Error modal watcher ──
+
+  private startErrorModalWatcher(): void {
+    if (this.errorModalObserver) return;
+
+    const check = () => {
+      const modal = this.findErrorModal();
+      if (modal) {
+        this.log$.next('Auto-dismissing "something went wrong" error modal.');
+        this.dismissErrorModal(modal);
+      }
+    };
+
+    this.errorModalObserver = new MutationObserver(() => {
+      setTimeout(check, 300);
+    });
+
+    this.errorModalObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+  }
+
+  private stopErrorModalWatcher(): void {
+    if (this.errorModalObserver) {
+      this.errorModalObserver.disconnect();
+      this.errorModalObserver = null;
+    }
+  }
+
+  private findErrorModal(): HTMLElement | null {
+    const headings = document.querySelectorAll('h1');
+    for (let i = 0; i < headings.length; i++) {
+      const text = (headings[i].textContent || '').toLowerCase();
+      if (text.includes('something went wrong')) {
+        const modal = headings[i].closest('.modal, .modal-content, ngb-modal-window, [role="dialog"], .cdk-overlay-pane');
+        if (modal) {
+          const body = modal.textContent || '';
+          if (body.includes('Troubleshoot ID')) {
+            return modal as HTMLElement;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  private dismissErrorModal(modal: HTMLElement): void {
+    const buttons = modal.querySelectorAll('button');
+    for (let i = 0; i < buttons.length; i++) {
+      const btnText = (buttons[i].textContent || '').trim().toLowerCase();
+      if (btnText === 'cancel' || btnText === 'close' || btnText === 'dismiss') {
+        this.ngZone.run(() => {
+          (buttons[i] as HTMLElement).click();
+        });
+        return;
+      }
+    }
+    const closeBtn = modal.querySelector('[aria-label="Close"], .close, .btn-close') as HTMLElement;
+    if (closeBtn) {
+      this.ngZone.run(() => closeBtn.click());
+    }
   }
 
   // ── Visual cursor ──
