@@ -4,6 +4,7 @@ import { ReplayStateService } from '../../services/replay-state.service';
 import {
   ReplayDriverService,
   ReplayStatus,
+  StuckEvent,
 } from '../../services/replay-driver.service';
 import { ErrorReportService } from '../../services/error-report.service';
 import {
@@ -60,6 +61,19 @@ import {
               <option [ngValue]="5">5x</option>
             </select>
             <button class="etl-btn-stop" (click)="stop()">Stop</button>
+          </div>
+        </div>
+
+        <!-- Stuck overlay -->
+        <div class="etl-stuck-banner" *ngIf="stuckEvent">
+          <div class="etl-stuck-icon">&#9888;</div>
+          <div class="etl-stuck-title">Replay stuck — element not found</div>
+          <div class="etl-stuck-desc">{{ stuckEvent.description }}</div>
+          <div class="etl-stuck-selector">Selector: <code>{{ stuckEvent.selector }}</code></div>
+          <div class="etl-stuck-hint">Perform the action manually in the app, then continue.</div>
+          <div class="etl-stuck-actions">
+            <button class="etl-stuck-btn etl-stuck-skip" (click)="driver.skipStuck()">Skip &amp; Continue &#9654;</button>
+            <button class="etl-stuck-btn etl-stuck-retry" (click)="driver.retryStuck()">&#8634; Retry</button>
           </div>
         </div>
 
@@ -431,6 +445,36 @@ import {
       .etl-header-key { color: #90cdf4; min-width: 150px; font-family: 'Fira Code', monospace; }
       .etl-header-val { color: #e2e8f0; word-break: break-all; font-family: 'Fira Code', monospace; }
 
+      /* Stuck banner */
+      .etl-stuck-banner {
+        background: #744210;
+        border: 1px solid #d69e2e;
+        border-radius: 6px;
+        padding: 10px 12px;
+        margin: 8px 0;
+        animation: etl-stuck-flash 0.6s ease-out;
+      }
+      @keyframes etl-stuck-flash { 0% { background: #d69e2e; } 100% { background: #744210; } }
+      .etl-stuck-icon { font-size: 20px; margin-bottom: 4px; }
+      .etl-stuck-title { font-weight: 700; font-size: 13px; color: #fefcbf; margin-bottom: 4px; }
+      .etl-stuck-desc { color: #fefcbf; margin-bottom: 4px; word-break: break-word; }
+      .etl-stuck-selector { font-size: 11px; color: #ecc94b; margin-bottom: 6px; word-break: break-all; }
+      .etl-stuck-selector code { background: rgba(0,0,0,0.3); padding: 1px 4px; border-radius: 3px; }
+      .etl-stuck-hint { font-size: 11px; color: #d69e2e; font-style: italic; margin-bottom: 8px; }
+      .etl-stuck-actions { display: flex; gap: 8px; }
+      .etl-stuck-btn {
+        padding: 6px 14px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .etl-stuck-skip { background: #3182ce; color: #fff; }
+      .etl-stuck-skip:hover { background: #2b6cb0; }
+      .etl-stuck-retry { background: #2d3748; color: #e2e8f0; border: 1px solid #4a5568; }
+      .etl-stuck-retry:hover { background: #4a5568; }
+
       .etl-replay-log {
         max-height: 80px;
         overflow-y: auto;
@@ -449,6 +493,7 @@ export class ReplayPanelComponent implements OnInit, OnDestroy {
   active = false;
   loaded = false;
   collapsed = false;
+  stuckEvent: StuckEvent | null = null;
   report: ErrorReport | null = null;
   timeline: TimelineEvent[] = [];
   filteredTimeline: TimelineEvent[] = [];
@@ -488,7 +533,8 @@ export class ReplayPanelComponent implements OnInit, OnDestroy {
       this.driver.log$.subscribe((msg) => {
         this.logs.push(msg);
         if (this.logs.length > 200) this.logs.shift();
-      })
+      }),
+      this.driver.stuck$.subscribe((s) => (this.stuckEvent = s))
     );
   }
 
@@ -677,6 +723,7 @@ export class ReplayPanelComponent implements OnInit, OnDestroy {
     this.report = null;
     this.logs = [];
     this.selectedEvent = null;
+    this.stuckEvent = null;
     this.searchTerm = '';
     this.activeFilter = null;
     this.shrinkBody(false);

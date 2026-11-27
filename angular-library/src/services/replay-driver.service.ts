@@ -11,16 +11,27 @@ import {
 
 export type ReplayStatus = 'idle' | 'playing' | 'paused' | 'finished';
 
+export interface StuckEvent {
+  type: 'click' | 'input';
+  event: TimelineEvent;
+  description: string;
+  selector: string;
+  elementTag: string;
+  elementText?: string;
+}
+
 @Injectable()
 export class ReplayDriverService {
   status$ = new BehaviorSubject<ReplayStatus>('idle');
   currentEvent$ = new BehaviorSubject<TimelineEvent | null>(null);
+  stuck$ = new BehaviorSubject<StuckEvent | null>(null);
   log$ = new Subject<string>();
 
   private index = 0;
   private speed = 1;
   private timeoutId: any = null;
   private cursorEl: HTMLElement | null = null;
+  private stuckResolve: (() => void) | null = null;
 
   constructor(
     private replayState: ReplayStateService,
@@ -30,6 +41,26 @@ export class ReplayDriverService {
 
   setSpeed(factor: number): void {
     this.speed = factor;
+  }
+
+  skipStuck(): void {
+    this.stuck$.next(null);
+    if (this.stuckResolve) {
+      this.stuckResolve();
+      this.stuckResolve = null;
+    }
+  }
+
+  retryStuck(): void {
+    const stuck = this.stuck$.value;
+    if (!stuck) return;
+    this.stuck$.next(null);
+    if (this.stuckResolve) {
+      this.stuckResolve();
+      this.stuckResolve = null;
+    }
+    this.index--;
+    this.play();
   }
 
   play(): void {
@@ -82,6 +113,8 @@ export class ReplayDriverService {
     this.pause();
     this.index = 0;
     this.currentEvent$.next(null);
+    this.stuck$.next(null);
+    this.stuckResolve = null;
     this.status$.next('idle');
     this.removeCursor();
   }
@@ -149,8 +182,15 @@ export class ReplayDriverService {
   private handleClick(click: ClickEvent): Promise<void> {
     return this.findElement(click, 5000).then((target) => {
       if (!target) {
-        this.log$.next(`WARNING: element not found: ${click.selector}`);
-        return Promise.resolve();
+        this.log$.next(`STUCK: element not found — waiting for manual override: ${click.selector}`);
+        return this.waitForManualOverride({
+          type: 'click',
+          event: this.currentEvent$.value!,
+          description: `Click <${click.elementTag}> ${click.elementText || ''}`.trim(),
+          selector: click.selector,
+          elementTag: click.elementTag,
+          elementText: click.elementText,
+        });
       }
 
       target.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -334,8 +374,14 @@ export class ReplayDriverService {
   private handleInput(input: InputChangeEvent): Promise<void> {
     return this.findInputElement(input, 5000).then((target) => {
       if (!target) {
-        this.log$.next(`WARNING: input element not found: ${input.selector}`);
-        return Promise.resolve();
+        this.log$.next(`STUCK: input element not found — waiting for manual override: ${input.selector}`);
+        return this.waitForManualOverride({
+          type: 'input',
+          event: this.currentEvent$.value!,
+          description: `Set <${input.elementTag}> ${input.name || input.elementId || ''} = "${input.value}"`.trim(),
+          selector: input.selector,
+          elementTag: input.elementTag,
+        });
       }
 
       target.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -392,6 +438,14 @@ export class ReplayDriverService {
       || this.tryAriaLabel(input.ariaLabel, input.elementTag)
       || this.tryNameAttr(input.name, input.elementTag)
       || this.tryClasses(input.classes, input.elementTag);
+  }
+
+  private waitForManualOverride(stuck: StuckEvent): Promise<void> {
+    this.status$.next('paused');
+    this.stuck$.next(stuck);
+    return new Promise<void>((resolve) => {
+      this.stuckResolve = resolve;
+    });
   }
 
   private handleHttp(_event: TimelineEvent): void {
